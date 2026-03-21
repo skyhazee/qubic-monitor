@@ -55,18 +55,9 @@ function formatNodeCard(data, stats, price) {
   // Sync status
   const syncText = syncStatus(node.lastTick, node.lastReferenceTick);
 
-  // Estimated reward in QUBIC
-  const rewardPool = type === 'BOB'
-    ? stats?.epochRewards?.bobPool
-    : stats?.epochRewards?.litePool;
-
-  // Estimated reward
-  let estRewardQubic = 0;
+  // Estimated reward — estimatedReward is in QUBIC tokens
+  const estRewardQubic = live.estimatedReward || 0;
   let estRewardUsd = '—';
-  if (rewardPool && live.rewardPoints) {
-    // This is a rough estimate — actual depends on total points
-    estRewardQubic = live.rewardPoints;
-  }
   if (price && estRewardQubic > 0) {
     estRewardUsd = formatUsd(estRewardQubic * price);
   }
@@ -96,7 +87,7 @@ function formatNodeCard(data, stats, price) {
   msg += `├ Final:   ${scoreBar(live.finalScore || 0)} ${(live.finalScore || 0).toFixed(1)}%\n`;
   msg += `├ Points:  <b>${formatNumber(live.rewardPoints)}</b>\n`;
   msg += `└ Est. Reward: <b>${formatNumber(estRewardQubic)} QUBIC</b>`;
-  if (estRewardUsd !== '—') msg += ` (${estRewardUsd})`;
+  if (estRewardUsd !== '—') msg += ` (~${estRewardUsd})`;
   msg += `\n`;
 
   msg += epochText;
@@ -131,11 +122,12 @@ function formatNodeSummary(data, stats, price) {
   const syncText = syncStatus(node.lastTick, node.lastReferenceTick);
   const eligible = node.eligibleForReward ? '✅' : '❌';
 
+  const estReward = live.estimatedReward || 0;
   let msg = `${isActive ? '🟢' : '🔴'} <b>${escapeHtml(node.alias)}</b> [${type}] ${eligible}\n`;
-  msg += `   ${syncText} | Final: ${(live.finalScore || 0).toFixed(1)}% | Pts: ${formatNumber(live.rewardPoints)}`;
+  msg += `   ${syncText} | Final: ${(live.finalScore || 0).toFixed(1)}% | Est: ${formatNumber(estReward)} QUBIC`;
 
-  if (price && live.rewardPoints) {
-    msg += ` (${formatUsd(live.rewardPoints * price)})`;
+  if (price && estReward > 0) {
+    msg += ` (~${formatUsd(estReward * price)})`;
   }
 
   return msg;
