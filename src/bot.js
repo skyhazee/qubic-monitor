@@ -139,7 +139,7 @@ Get detailed info about any node without adding it.
     }
   });
 
-  // /check
+  // /check — show full detail cards for each node
   bot.onText(/\/check(?:@\w+)?(?:\s|$)/, async (msg) => {
     const chatId = msg.chat.id;
     const nodes = getNodesByChat(chatId);
@@ -161,57 +161,51 @@ Get detailed info about any node without adding it.
         fetchQubicPrice(),
       ]);
 
-      let replyMsg = `📋 <b>Node Terdaftar</b> (${nodes.length})\n\n`;
+      // Delete loading message
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(() => {});
 
-      for (const n of nodes) {
-        try {
-          const nodeData = await fetchNode(n.operator, n.type);
-          if (nodeData && nodeData.node) {
-            const summary = formatNodeSummary(nodeData, stats, price);
-            if (summary) {
-              replyMsg += summary + '\n\n';
-              continue;
-            }
-          }
-          replyMsg += `⚠️ <b>${escapeHtml(n.alias)}</b> — data tidak tersedia\n\n`;
-        } catch {
-          replyMsg += `⚠️ <b>${escapeHtml(n.alias)}</b> — gagal fetch\n\n`;
-        }
-      }
-
-      // Epoch info
+      // Send header
+      let header = `📋 <b>Node Terdaftar</b> (${nodes.length})\n`;
       if (stats?.epochProgress) {
         const pct = stats.epochProgress.progress_percent?.toFixed(1) || '—';
         const remaining = stats.epochProgress.time_remaining_seconds;
         const days = Math.floor(remaining / 86400);
         const hours = Math.floor((remaining % 86400) / 3600);
-        replyMsg += `\n📅 <b>Epoch ${stats.reference?.epoch || '—'}</b> — ${pct}% (${days}d ${hours}h remaining)`;
+        header += `📅 <b>Epoch ${stats.reference?.epoch || '—'}</b> — ${pct}% (${days}d ${hours}h remaining)\n`;
       }
-
       if (price) {
-        replyMsg += `\n💰 QUBIC Price: <b>$${price.toFixed(8)}</b>`;
+        header += `💰 QUBIC Price: <b>$${price.toFixed(8)}</b>`;
       }
+      await bot.sendMessage(chatId, header, { parse_mode: 'HTML' });
 
-      // Handle long messages
-      if (replyMsg.length > 4000) {
-        await bot.editMessageText(replyMsg.substring(0, 4000) + '...', {
-          chat_id: chatId,
-          message_id: loadingMsg.message_id,
-          parse_mode: 'HTML',
-        });
-      } else {
-        await bot.editMessageText(replyMsg, {
-          chat_id: chatId,
-          message_id: loadingMsg.message_id,
-          parse_mode: 'HTML',
-        });
+      // Send detailed card for each node
+      for (const n of nodes) {
+        try {
+          const nodeData = await fetchNode(n.operator, n.type);
+          if (nodeData && nodeData.node) {
+            const card = formatNodeCard(nodeData, stats, price);
+            await bot.sendMessage(chatId, card, { parse_mode: 'HTML' });
+          } else {
+            await bot.sendMessage(chatId,
+              `⚠️ <b>${escapeHtml(n.alias)}</b> — data tidak tersedia`,
+              { parse_mode: 'HTML' }
+            );
+          }
+        } catch {
+          await bot.sendMessage(chatId,
+            `⚠️ <b>${escapeHtml(n.alias)}</b> — gagal fetch`,
+            { parse_mode: 'HTML' }
+          );
+        }
       }
     } catch (err) {
       console.error('Error in /check:', err);
       await bot.editMessageText(
         `❌ Gagal fetch data: ${escapeHtml(err.message)}`,
         { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'HTML' }
-      );
+      ).catch(() => {
+        bot.sendMessage(chatId, `❌ Gagal fetch data: ${escapeHtml(err.message)}`, { parse_mode: 'HTML' });
+      });
     }
   });
 
