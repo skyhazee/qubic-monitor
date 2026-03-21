@@ -29,16 +29,19 @@ Telegram bot untuk memantau node Qubic Guardian. Tambahkan node, cek status live
 | Command | Deskripsi |
 |---------|-----------|
 | `/start` | Welcome message |
-| `/add ADDRESS/ALIAS` | Tambah node ke watchlist |
+| `/add <address atau alias>` | Tambah node ke watchlist |
 | `/check` | Lihat semua node terdaftar |
-| `/info ADDRESS/ALIAS` | Info node tanpa menambahkan |
-| `/remove ADDRESS/ALIAS` | Hapus node dari watchlist |
+| `/info <address atau alias>` | Info node tanpa menambahkan |
+| `/remove <address atau alias>` | Hapus node dari watchlist |
 | `/help` | Bantuan |
 
 ## Contoh
 
 ```
-/add SFRKDOXIGWAXJDKTSWQDGXYDWSEBWSDRNKCTYZIKLCNKPQRXGSLAPKZGYRAD/bob
+/add 0xami
+/add SFRKDOXIGWAXJDKTSWQDGXYDWSEBWSDRNKCTYZIKLCNKPQRXGSLAPKZGYRAD
+/info bitos
+/remove 0xami
 ```
 
 Bot akan menampilkan:

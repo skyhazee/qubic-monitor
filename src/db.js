@@ -15,7 +15,7 @@ function init() {
       alias TEXT NOT NULL,
       type TEXT DEFAULT '',
       added_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(chat_id, operator, alias)
+      UNIQUE(chat_id, operator, type)
     )
   `);
   return db;
@@ -30,11 +30,19 @@ function addNode(chatId, operator, alias, type = '') {
   return result.changes > 0;
 }
 
-function removeNode(chatId, operator, alias) {
+function removeNode(chatId, operator, type) {
   const stmt = db.prepare(`
-    DELETE FROM nodes WHERE chat_id = ? AND operator = ? AND alias = ?
+    DELETE FROM nodes WHERE chat_id = ? AND operator = ? AND type = ?
   `);
-  const result = stmt.run(chatId, operator, alias);
+  const result = stmt.run(chatId, operator, type);
+  return result.changes > 0;
+}
+
+function removeNodeByAlias(chatId, alias) {
+  const stmt = db.prepare(`
+    DELETE FROM nodes WHERE chat_id = ? AND LOWER(alias) = LOWER(?)
+  `);
+  const result = stmt.run(chatId, alias);
   return result.changes > 0;
 }
 
@@ -44,11 +52,11 @@ function getNodesByChat(chatId) {
   `).all(chatId);
 }
 
-function nodeExists(chatId, operator, alias) {
+function nodeExistsByOperator(chatId, operator, type) {
   const row = db.prepare(`
-    SELECT 1 FROM nodes WHERE chat_id = ? AND operator = ? AND alias = ?
-  `).get(chatId, operator, alias);
+    SELECT 1 FROM nodes WHERE chat_id = ? AND operator = ? AND type = ?
+  `).get(chatId, operator, type);
   return !!row;
 }
 
-module.exports = { init, addNode, removeNode, getNodesByChat, nodeExists };
+module.exports = { init, addNode, removeNode, removeNodeByAlias, getNodesByChat, nodeExistsByOperator };
