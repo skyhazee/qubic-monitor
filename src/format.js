@@ -78,6 +78,7 @@ function formatNodeCard(data, stats, price) {
   msg += `├ Operator: <code>${node.operator}</code>\n`;
   msg += `├ ${eligibleText}\n`;
   msg += `├ ${syncText}\n`;
+  msg += `├ Checks: <b>${formatNumber(node.successfulChecks || 0)} / ${formatNumber(node.totalChecks || 0)}</b>\n`;
   msg += `├ Last Tick: <code>${formatNumber(node.lastTick)}</code>\n`;
   msg += `└ Ref Tick:  <code>${formatNumber(node.lastReferenceTick)}</code>\n`;
 
