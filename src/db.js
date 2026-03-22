@@ -3,16 +3,17 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '..', 'data.json');
 
-let data = { nodes: [] };
+let data = { nodes: [], nodeStatus: {} };
 
 function load() {
   try {
     if (fs.existsSync(DB_PATH)) {
       data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
       if (!data.nodes) data.nodes = [];
+      if (!data.nodeStatus) data.nodeStatus = {};
     }
   } catch {
-    data = { nodes: [] };
+    data = { nodes: [], nodeStatus: {} };
   }
 }
 
@@ -66,10 +67,34 @@ function getNodesByChat(chatId) {
   return data.nodes.filter(n => n.chat_id === chatId);
 }
 
+function getAllNodes() {
+  return data.nodes;
+}
+
+function getAllChatIds() {
+  return [...new Set(data.nodes.map(n => n.chat_id))];
+}
+
 function nodeExistsByOperator(chatId, operator, type) {
   return data.nodes.some(n =>
     n.chat_id === chatId && n.operator === operator && n.type === type
   );
 }
 
-module.exports = { init, addNode, removeNode, removeNodeByAlias, getNodesByChat, nodeExistsByOperator };
+// Status tracking for alerts
+function getNodeStatus(operator, type) {
+  const key = `${operator}:${type}`;
+  return data.nodeStatus[key] || null;
+}
+
+function setNodeStatus(operator, type, status) {
+  const key = `${operator}:${type}`;
+  data.nodeStatus[key] = status;
+  save();
+}
+
+module.exports = {
+  init, addNode, removeNode, removeNodeByAlias,
+  getNodesByChat, getAllNodes, getAllChatIds,
+  nodeExistsByOperator, getNodeStatus, setNodeStatus,
+};

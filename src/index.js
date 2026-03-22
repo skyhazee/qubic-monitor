@@ -1,6 +1,7 @@
 require('dotenv').config();
 const db = require('./db');
 const { createBot } = require('./bot');
+const { startMonitor } = require('./monitor');
 
 // Validate token
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -17,6 +18,9 @@ console.log('✅ Database initialized');
 
 // Start bot
 const bot = createBot(token);
+
+// Start node monitor (checks every 5 min, alerts on offline/online)
+startMonitor(bot);
 
 // Graceful shutdown
 process.on('SIGINT', () => {
