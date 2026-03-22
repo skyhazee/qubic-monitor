@@ -91,6 +91,9 @@ function formatNodeCard(data, stats, price) {
   msg += `\n`;
 
   msg += epochText;
+  if (price) {
+    msg += `\n💰 QUBIC Price: <b>$${price.toFixed(8)}</b>`;
+  }
 
   // Epoch history
   if (history && history.length > 0) {
