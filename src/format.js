@@ -137,4 +137,4 @@ function formatNodeSummary(data, stats, price) {
   return msg;
 }
 
-module.exports = { formatNodeCard, formatNodeSummary, escapeHtml };
+module.exports = { formatNodeCard, formatNodeSummary, escapeHtml, formatNumber };

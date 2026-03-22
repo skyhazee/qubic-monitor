@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { fetchNode, searchNode, fetchStats, fetchQubicPrice } = require('./api');
 const { addNode, removeNode, removeNodeByAlias, getNodesByChat, nodeExistsByOperator } = require('./db');
-const { formatNodeCard, formatNodeSummary, escapeHtml } = require('./format');
+const { formatNodeCard, formatNodeSummary, escapeHtml, formatNumber } = require('./format');
 
 function createBot(token) {
   const bot = new TelegramBot(token, { polling: true });
@@ -19,6 +19,7 @@ Monitor your Qubic guardian nodes right from Telegram.
 /check — Show all registered nodes
 /remove <code>address or alias</code> — Remove a node
 /info <code>address or alias</code> — Quick look (no save)
+/history <code>address or alias</code> — Epoch history
 /help — Show this message
 
 <b>Examples:</b>
@@ -46,11 +47,20 @@ Remove a node from your watchlist.
 /info <code>address or alias</code>
 Get detailed info about any node without adding it.
 
+/history <code>address or alias</code>
+View full epoch history for a node.
+
+<b>🔔 Auto Alerts:</b>
+Bot otomatis alert kalau node kamu:
+• Offline / kembali online
+• Sync score turun drastis
+• Jadi ineligible / kembali eligible
+• Epoch berakhir (reward summary)
+
 <b>Examples:</b>
 <code>/add 0xami</code>
-<code>/add SFRKDOXIGWAXJDKTSWQDGXYDWSEBWSDRNKCTYZIKLCNKPQRXGSLAPKZGYRAD</code>
 <code>/info bitos</code>
-<code>/remove 0xami</code>
+<code>/history raykiee</code>
     `.trim();
     bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
   });
@@ -294,6 +304,94 @@ Get detailed info about any node without adding it.
     }
   });
 
+  // /history QUERY — full epoch history
+  bot.onText(/\/history(?:@\w+)?\s+(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const query = match[1].trim();
+
+    const loadingMsg = await bot.sendMessage(chatId, '⏳ Fetching epoch history...');
+
+    try {
+      const [matches, price] = await Promise.all([
+        searchNode(query),
+        fetchQubicPrice(),
+      ]);
+
+      if (matches.length === 0) {
+        await bot.editMessageText(
+          '❌ Node tidak ditemukan.',
+          { chat_id: chatId, message_id: loadingMsg.message_id }
+        );
+        return;
+      }
+
+      const firstNode = matches[0];
+      let detailedData;
+      try {
+        detailedData = await fetchNode(firstNode.operator, firstNode.type);
+      } catch {
+        detailedData = null;
+      }
+
+      if (!detailedData || !detailedData.history || detailedData.history.length === 0) {
+        await bot.editMessageText(
+          `📜 <b>${escapeHtml(firstNode.alias)}</b> — belum ada epoch history.`,
+          { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'HTML' }
+        );
+        return;
+      }
+
+      const node = detailedData.node;
+      const type = (node?.type || '').toUpperCase();
+      let msg = `📜 <b>Epoch History — ${escapeHtml(node?.alias || firstNode.alias)}</b> [${type}]\n\n`;
+
+      // Show all epochs, newest first
+      const epochs = [...detailedData.history].reverse();
+      for (const h of epochs) {
+        const icon = h.eligible ? '✅' : '❌';
+        msg += `<b>Epoch ${h.epoch}</b> ${icon}\n`;
+        msg += `├ Uptime: ${(h.uptimeScore || 0).toFixed(1)}%\n`;
+        msg += `├ Sync: ${(h.syncScore || 0).toFixed(1)}%\n`;
+        msg += `├ Final: ${(h.finalScore || 0).toFixed(1)}%\n`;
+        msg += `├ Points: ${formatNumber(h.rewardPoints)}`;
+        if (!h.eligible && h.disqualifyReason) {
+          msg += `\n├ ⚠️ ${h.disqualifyReason.replace(/_/g, ' ')}`;
+        }
+        msg += `\n\n`;
+      }
+
+      // Delete loading and send
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(() => {});
+
+      if (msg.length > 4000) {
+        // Split into multiple messages
+        const chunks = [];
+        let chunk = '';
+        for (const line of msg.split('\n')) {
+          if ((chunk + line + '\n').length > 4000) {
+            chunks.push(chunk);
+            chunk = '';
+          }
+          chunk += line + '\n';
+        }
+        if (chunk) chunks.push(chunk);
+        for (const c of chunks) {
+          await bot.sendMessage(chatId, c, { parse_mode: 'HTML' });
+        }
+      } else {
+        await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
+      }
+    } catch (err) {
+      console.error('Error in /history:', err);
+      await bot.editMessageText(
+        `❌ Gagal fetch: ${escapeHtml(err.message)}`,
+        { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'HTML' }
+      ).catch(() => {
+        bot.sendMessage(chatId, `❌ Gagal fetch: ${escapeHtml(err.message)}`, { parse_mode: 'HTML' });
+      });
+    }
+  });
+
   // Handle commands without arguments
   bot.onText(/\/add(?:@\w+)?$/, (msg) => {
     bot.sendMessage(msg.chat.id,
@@ -312,6 +410,13 @@ Get detailed info about any node without adding it.
   bot.onText(/\/info(?:@\w+)?$/, (msg) => {
     bot.sendMessage(msg.chat.id,
       '⚠️ Masukkan address atau alias:\n<code>/info address_or_alias</code>',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.onText(/\/history(?:@\w+)?$/, (msg) => {
+    bot.sendMessage(msg.chat.id,
+      '⚠️ Masukkan address atau alias:\n<code>/history address_or_alias</code>\n\nContoh:\n<code>/history raykiee</code>',
       { parse_mode: 'HTML' }
     );
   });
