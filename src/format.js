@@ -116,25 +116,69 @@ function formatNodeCard(data, stats, price) {
   return msg;
 }
 
-function formatNodeSummary(data, stats, price) {
-  const { node } = data;
-  if (!node) return null;
+function formatWalletCard(address, alias, balData, price) {
+  if (!balData) return `⚠️ <b>${escapeHtml(alias)}</b> — balance tidak tersedia`;
 
-  const isActive = node.lastSuccess;
-  const type = (node.type || '').toUpperCase();
-  const live = node.liveScore || {};
-  const syncText = syncStatus(node.lastTick, node.lastReferenceTick);
-  const eligible = node.eligibleForReward ? '✅' : '❌';
+  const balance = BigInt(balData.balance || '0');
+  const incoming = BigInt(balData.incomingAmount || '0');
+  const outgoing = BigInt(balData.outgoingAmount || '0');
+  const inTx = balData.numberOfIncomingTransfers || 0;
+  const outTx = balData.numberOfOutgoingTransfers || 0;
 
-  const estReward = live.estimatedReward || 0;
-  let msg = `${isActive ? '🟢' : '🔴'} <b>${escapeHtml(node.alias)}</b> [${type}] ${eligible}\n`;
-  msg += `   ${syncText} | Final: ${(live.finalScore || 0).toFixed(1)}% | Est: ${formatNumber(estReward)} QUBIC`;
-
-  if (price && estReward > 0) {
-    msg += ` (~${formatUsd(estReward * price)})`;
+  let msg = `💰 <b>${escapeHtml(alias)}</b>\n`;
+  msg += `├ Address: <code>${address.substring(0, 8)}...${address.substring(address.length - 8)}</code>\n`;
+  msg += `├ Balance: <b>${formatNumber(Number(balance))} QUBIC</b>`;
+  if (price && balance > 0n) {
+    msg += ` (~${formatUsd(Number(balance) * price)})`;
   }
-
+  msg += `\n`;
+  msg += `├ Total In:  <b>${formatNumber(Number(incoming))} QUBIC</b> (${inTx} tx)\n`;
+  msg += `├ Total Out: <b>${formatNumber(Number(outgoing))} QUBIC</b> (${outTx} tx)\n`;
+  msg += `└ Tick: <code>${formatNumber(balData.validForTick)}</code>`;
   return msg;
 }
 
-module.exports = { formatNodeCard, formatNodeSummary, escapeHtml, formatNumber };
+function formatBalanceChange(alias, address, oldBal, newBal, price) {
+  const oldBalance = BigInt(oldBal.balance || '0');
+  const newBalance = BigInt(newBal.balance || '0');
+  const oldIncoming = BigInt(oldBal.incomingAmount || '0');
+  const newIncoming = BigInt(newBal.incomingAmount || '0');
+  const oldOutgoing = BigInt(oldBal.outgoingAmount || '0');
+  const newOutgoing = BigInt(newBal.outgoingAmount || '0');
+  const oldInTx = oldBal.numberOfIncomingTransfers || 0;
+  const newInTx = newBal.numberOfIncomingTransfers || 0;
+  const oldOutTx = oldBal.numberOfOutgoingTransfers || 0;
+  const newOutTx = newBal.numberOfOutgoingTransfers || 0;
+
+  const changes = [];
+
+  if (newBalance !== oldBalance) {
+    const delta = newBalance - oldBalance;
+    const sign = delta > 0n ? '+' : '';
+    changes.push(`├ Balance: <b>${formatNumber(Number(oldBalance))} → ${formatNumber(Number(newBalance))}</b> (${sign}${formatNumber(Number(delta))})`);
+  }
+
+  if (newIncoming !== oldIncoming) {
+    const delta = newIncoming - oldIncoming;
+    changes.push(`├ 📥 Incoming: +${formatNumber(Number(delta))} QUBIC (${newInTx - oldInTx} new tx)`);
+  }
+
+  if (newOutgoing !== oldOutgoing) {
+    const delta = newOutgoing - oldOutgoing;
+    changes.push(`├ 📤 Outgoing: +${formatNumber(Number(delta))} QUBIC (${newOutTx - oldOutTx} new tx)`);
+  }
+
+  if (changes.length === 0) return null;
+
+  let msg = `🔔 <b>Wallet Update — ${escapeHtml(alias)}</b>\n`;
+  msg += `├ <code>${address.substring(0, 8)}...${address.substring(address.length - 8)}</code>\n`;
+  msg += changes.join('\n') + '\n';
+  msg += `└ New Balance: <b>${formatNumber(Number(newBalance))} QUBIC</b>`;
+  if (price && newBalance > 0n) {
+    msg += ` (~${formatUsd(Number(newBalance) * price)})`;
+  }
+  return msg;
+}
+
+module.exports = { formatNodeCard, formatWalletCard, formatBalanceChange, escapeHtml, formatNumber };
+

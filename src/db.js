@@ -3,7 +3,7 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '..', 'data.json');
 
-let data = { nodes: [], nodeStatus: {} };
+let data = { nodes: [], nodeStatus: {}, walletBalances: {} };
 
 function load() {
   try {
@@ -11,9 +11,10 @@ function load() {
       data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
       if (!data.nodes) data.nodes = [];
       if (!data.nodeStatus) data.nodeStatus = {};
+      if (!data.walletBalances) data.walletBalances = {};
     }
   } catch {
-    data = { nodes: [], nodeStatus: {} };
+    data = { nodes: [], nodeStatus: {}, walletBalances: {} };
   }
 }
 
@@ -93,8 +94,19 @@ function setNodeStatus(operator, type, status) {
   save();
 }
 
+// Wallet balance tracking
+function getWalletBalance(address) {
+  return data.walletBalances[address] || null;
+}
+
+function setWalletBalance(address, balanceData) {
+  data.walletBalances[address] = balanceData;
+  save();
+}
+
 module.exports = {
   init, addNode, removeNode, removeNodeByAlias,
   getNodesByChat, getAllNodes, getAllChatIds,
   nodeExistsByOperator, getNodeStatus, setNodeStatus,
+  getWalletBalance, setWalletBalance,
 };

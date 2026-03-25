@@ -74,4 +74,25 @@ async function fetchQubicPrice() {
   }
 }
 
-module.exports = { fetchNode, fetchAllNodes, searchNode, fetchStats, fetchQubicPrice };
+const QUBIC_RPC_URL = 'https://rpc.qubic.org/live/v1/balances';
+
+async function fetchWalletBalance(address) {
+  const url = `${QUBIC_RPC_URL}/${encodeURIComponent(address)}`;
+  const res = await fetch(url, {
+    headers: {
+      'accept': '*/*',
+      'origin': 'https://explorer.qubic.org',
+      'referer': 'https://explorer.qubic.org/',
+      'user-agent': 'QubicMonitorBot/1.0',
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error(`Wallet API error: ${res.status} ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.balance || null;
+}
+
+module.exports = { fetchNode, fetchAllNodes, searchNode, fetchStats, fetchQubicPrice, fetchWalletBalance };

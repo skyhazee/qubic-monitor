@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { fetchNode, searchNode, fetchStats, fetchQubicPrice } = require('./api');
+const { fetchNode, searchNode, fetchStats, fetchQubicPrice, fetchWalletBalance } = require('./api');
 const { addNode, removeNode, removeNodeByAlias, getNodesByChat, nodeExistsByOperator } = require('./db');
-const { formatNodeCard, formatNodeSummary, escapeHtml, formatNumber } = require('./format');
+const { formatNodeCard, formatWalletCard, escapeHtml, formatNumber } = require('./format');
 
 function createBot(token) {
   const bot = new TelegramBot(token, { polling: true });
@@ -20,6 +20,7 @@ Monitor your Qubic guardian nodes right from Telegram.
 /remove <code>address or alias</code> — Remove a node
 /info <code>address or alias</code> — Quick look (no save)
 /history <code>address or alias</code> — Epoch history
+/wallet — View wallet balances (auto-detected)
 /help — Show this message
 
 <b>Examples:</b>
@@ -50,12 +51,17 @@ Get detailed info about any node without adding it.
 /history <code>address or alias</code>
 View full epoch history for a node.
 
+/wallet
+Lihat saldo wallet dari semua node yang terdaftar.
+Alamat wallet otomatis terdeteksi dari Operator address.
+
 <b>🔔 Auto Alerts:</b>
 Bot otomatis alert kalau node kamu:
 • Offline / kembali online
 • Sync score turun drastis
 • Jadi ineligible / kembali eligible
 • Epoch berakhir (reward summary)
+• Saldo wallet berubah (incoming/outgoing)
 
 <b>Examples:</b>
 <code>/add 0xami</code>
@@ -389,6 +395,72 @@ Bot otomatis alert kalau node kamu:
       ).catch(() => {
         bot.sendMessage(chatId, `❌ Gagal fetch: ${escapeHtml(err.message)}`, { parse_mode: 'HTML' });
       });
+    }
+  });
+
+  // /wallet — show wallet balances for all registered nodes (auto-detect from operator address)
+  bot.onText(/\/wallet(?:@\w+)?(?:\s|$)/, async (msg) => {
+    const chatId = msg.chat.id;
+    const nodes = getNodesByChat(chatId);
+
+    if (nodes.length === 0) {
+      return bot.sendMessage(chatId,
+        '📋 Belum ada node terdaftar.\nGunakan <code>/add address_or_alias</code> untuk menambahkan node terlebih dahulu.',
+        { parse_mode: 'HTML' }
+      );
+    }
+
+    // Get unique operator addresses
+    const uniqueAddresses = new Map();
+    for (const n of nodes) {
+      if (!uniqueAddresses.has(n.operator)) {
+        uniqueAddresses.set(n.operator, n.alias);
+      }
+    }
+
+    const loadingMsg = await bot.sendMessage(chatId,
+      `⏳ Fetching wallet balances untuk ${uniqueAddresses.size} address...`
+    );
+
+    try {
+      const price = await fetchQubicPrice();
+
+      await bot.deleteMessage(chatId, loadingMsg.message_id).catch(() => {});
+
+      let totalBalance = 0n;
+      let cardCount = 0;
+
+      for (const [address, alias] of uniqueAddresses) {
+        try {
+          const balData = await fetchWalletBalance(address);
+          const card = formatWalletCard(address, alias, balData, price);
+          await bot.sendMessage(chatId, card, { parse_mode: 'HTML' });
+          cardCount++;
+          if (balData && balData.balance) {
+            totalBalance += BigInt(balData.balance);
+          }
+        } catch (err) {
+          await bot.sendMessage(chatId,
+            `⚠️ <b>${escapeHtml(alias)}</b> — gagal fetch balance`,
+            { parse_mode: 'HTML' }
+          );
+        }
+      }
+
+      // Send total summary if more than 1 address
+      if (cardCount > 1) {
+        let summary = `\n📊 <b>Total Balance</b>: <b>${formatNumber(Number(totalBalance))} QUBIC</b>`;
+        if (price && totalBalance > 0n) {
+          summary += ` (~$${(Number(totalBalance) * price).toFixed(2)})`;
+        }
+        await bot.sendMessage(chatId, summary, { parse_mode: 'HTML' });
+      }
+    } catch (err) {
+      console.error('Error in /wallet:', err);
+      await bot.sendMessage(chatId,
+        `❌ Gagal fetch wallet data: ${escapeHtml(err.message)}`,
+        { parse_mode: 'HTML' }
+      );
     }
   });
 

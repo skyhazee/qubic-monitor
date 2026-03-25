@@ -32,6 +32,8 @@ Telegram bot untuk memantau node Qubic Guardian. Tambahkan node, cek status live
 | `/add <address atau alias>` | Tambah node ke watchlist |
 | `/check` | Lihat semua node terdaftar |
 | `/info <address atau alias>` | Info node tanpa menambahkan |
+| `/history <address atau alias>` | Lihat epoch history |
+| `/wallet` | Lihat saldo wallet (auto-detect dari node) |
 | `/remove <address atau alias>` | Hapus node dari watchlist |
 | `/help` | Bantuan |
 
@@ -41,6 +43,8 @@ Telegram bot untuk memantau node Qubic Guardian. Tambahkan node, cek status live
 /add 0xami
 /add SFRKDOXIGWAXJDKTSWQDGXYDWSEBWSDRNKCTYZIKLCNKPQRXGSLAPKZGYRAD
 /info bitos
+/wallet
+/history raykiee
 /remove 0xami
 ```
 
@@ -51,10 +55,12 @@ Bot akan menampilkan:
 - Live scores (uptime, sync, final) dengan progress bar
 - Reward points + estimasi dalam USD
 - Epoch history
+- **Wallet balance** (auto-detect dari Operator address)
+- **Auto alert** saat saldo wallet berubah
 
 ## Tech Stack
 - Node.js
 - node-telegram-bot-api
-- better-sqlite3
 - CoinGecko API (harga QUBIC)
 - Qubic Guardians API
+- Qubic RPC API (wallet balance)
