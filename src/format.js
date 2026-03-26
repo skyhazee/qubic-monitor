@@ -113,6 +113,10 @@ function formatNodeCard(data, stats, price) {
     }
   }
 
+  // Direct link to guardians page
+  const nodeType = (node.type || 'bob').toLowerCase();
+  msg += `\n🔗 <a href="https://guardians.qubic.org/nodes/${node.operator}/${nodeType}">View on Guardians</a>`;
+
   return msg;
 }
 
@@ -134,7 +138,8 @@ function formatWalletCard(address, alias, balData, price) {
   msg += `\n`;
   msg += `├ Total In:  <b>${formatNumber(Number(incoming))} QUBIC</b> (${inTx} tx)\n`;
   msg += `├ Total Out: <b>${formatNumber(Number(outgoing))} QUBIC</b> (${outTx} tx)\n`;
-  msg += `└ Tick: <code>${formatNumber(balData.validForTick)}</code>`;
+  msg += `├ Tick: <code>${formatNumber(balData.validForTick)}</code>\n`;
+  msg += `└ 🔗 <a href="https://explorer.qubic.org/network/address/${address}">View on Explorer</a>`;
   return msg;
 }
 
