@@ -40,12 +40,12 @@ Telegram bot untuk memantau node Qubic Guardian. Tambahkan node, cek status live
 ## Contoh
 
 ```
-/add 0xami
-/add SFRKDOXIGWAXJDKTSWQDGXYDWSEBWSDRNKCTYZIKLCNKPQRXGSLAPKZGYRAD
+/add 0x
+/add SFR...
 /info bitos
 /wallet
-/history raykiee
-/remove 0xami
+/history 0x
+/remove 0x
 ```
 
 Bot akan menampilkan:
