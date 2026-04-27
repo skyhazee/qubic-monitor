@@ -3,7 +3,13 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '..', 'data.json');
 
-let data = { nodes: [], nodeStatus: {}, walletBalances: {} };
+let data = {
+  nodes: [],
+  nodeStatus: {},
+  walletBalances: {},
+  bobNodes: [],
+  bobStatus: {},
+};
 
 function load() {
   try {
@@ -12,9 +18,11 @@ function load() {
       if (!data.nodes) data.nodes = [];
       if (!data.nodeStatus) data.nodeStatus = {};
       if (!data.walletBalances) data.walletBalances = {};
+      if (!data.bobNodes) data.bobNodes = [];
+      if (!data.bobStatus) data.bobStatus = {};
     }
   } catch {
-    data = { nodes: [], nodeStatus: {}, walletBalances: {} };
+    data = { nodes: [], nodeStatus: {}, walletBalances: {}, bobNodes: [], bobStatus: {} };
   }
 }
 
@@ -104,9 +112,71 @@ function setWalletBalance(address, balanceData) {
   save();
 }
 
+function normalizeBobUrl(url) {
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!clean) return '';
+  if (clean.endsWith('/qubic')) return clean;
+  return `${clean}/qubic`;
+}
+
+function addBobNode(chatId, alias, url) {
+  const cleanAlias = String(alias || '').trim();
+  const cleanUrl = normalizeBobUrl(url);
+  if (!cleanAlias || !cleanUrl) return false;
+  if (bobNodeExists(chatId, cleanAlias)) return false;
+
+  data.bobNodes.push({
+    chat_id: chatId,
+    alias: cleanAlias,
+    url: cleanUrl,
+    added_at: new Date().toISOString(),
+  });
+  save();
+  return true;
+}
+
+function removeBobNode(chatId, alias) {
+  const before = data.bobNodes.length;
+  data.bobNodes = data.bobNodes.filter(n =>
+    !(n.chat_id === chatId && n.alias.toLowerCase() === String(alias).toLowerCase())
+  );
+  if (data.bobNodes.length < before) {
+    save();
+    return true;
+  }
+  return false;
+}
+
+function getBobNodesByChat(chatId) {
+  return data.bobNodes.filter(n => n.chat_id === chatId);
+}
+
+function getAllBobNodes() {
+  return data.bobNodes;
+}
+
+function bobNodeExists(chatId, alias) {
+  return data.bobNodes.some(n =>
+    n.chat_id === chatId && n.alias.toLowerCase() === String(alias).toLowerCase()
+  );
+}
+
+function getBobStatus(alias, url) {
+  const key = normalizeBobUrl(url);
+  return data.bobStatus[key] || null;
+}
+
+function setBobStatus(alias, url, status) {
+  const key = normalizeBobUrl(url);
+  data.bobStatus[key] = status;
+  save();
+}
+
 module.exports = {
   init, addNode, removeNode, removeNodeByAlias,
   getNodesByChat, getAllNodes, getAllChatIds,
   nodeExistsByOperator, getNodeStatus, setNodeStatus,
   getWalletBalance, setWalletBalance,
+  addBobNode, removeBobNode, getBobNodesByChat, getAllBobNodes,
+  bobNodeExists, getBobStatus, setBobStatus,
 };

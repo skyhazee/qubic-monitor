@@ -1,7 +1,18 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { fetchNode, searchNode, fetchStats, fetchQubicPrice, fetchWalletBalance } = require('./api');
-const { addNode, removeNode, removeNodeByAlias, getNodesByChat, nodeExistsByOperator } = require('./db');
+const { fetchNode, searchNode, fetchStats, fetchQubicPrice, fetchWalletBalance, fetchBobTick, normalizeBobRpcUrl } = require('./api');
+const {
+  addNode,
+  removeNode,
+  removeNodeByAlias,
+  getNodesByChat,
+  nodeExistsByOperator,
+  addBobNode,
+  removeBobNode,
+  getBobNodesByChat,
+  getBobStatus,
+} = require('./db');
 const { formatNodeCard, formatWalletCard, escapeHtml, formatNumber } = require('./format');
+const { formatBobStatus } = require('./bobMonitor');
 
 function createBot(token) {
   const bot = new TelegramBot(token, { polling: true });
@@ -21,11 +32,15 @@ Monitor your Qubic guardian nodes right from Telegram.
 /info <code>address or alias</code> — Quick look (no save)
 /history <code>address or alias</code> — Epoch history
 /wallet — View wallet balances (auto-detected)
+/bobadd <code>alias url</code> — Monitor BOB RPC VPS
+/bobcheck — Show BOB tick/speed/stuck status
+/bobremove <code>alias</code> — Remove BOB RPC monitor
 /help — Show this message
 
 <b>Examples:</b>
 <code>/add 0xami</code>
 <code>/add SFRKDOXI...GYRAD</code>
+<code>/bobadd vps1 http://1.2.3.4:40420</code>
     `.trim();
     bot.sendMessage(chatId, welcome, { parse_mode: 'HTML' });
   });
@@ -55,6 +70,15 @@ View full epoch history for a node.
 Lihat saldo wallet dari semua node yang terdaftar.
 Alamat wallet otomatis terdeteksi dari Operator address.
 
+/bobadd <code>alias url</code>
+Tambah endpoint BOB RPC dari VPS. URL boleh base URL <code>http://ip:40420</code> atau full <code>http://ip:40420/qubic</code>.
+
+/bobcheck
+Lihat status BOB RPC, tick, tick/sec, lag, latency, dan status stuck/behind.
+
+/bobremove <code>alias</code>
+Hapus endpoint BOB RPC dari monitor.
+
 <b>🔔 Auto Alerts:</b>
 Bot otomatis alert kalau node kamu:
 • Offline / kembali online
@@ -62,11 +86,13 @@ Bot otomatis alert kalau node kamu:
 • Jadi ineligible / kembali eligible
 • Epoch berakhir (reward summary)
 • Saldo wallet berubah (incoming/outgoing)
+• BOB RPC offline, stuck, behind, atau recovered
 
 <b>Examples:</b>
 <code>/add 0xami</code>
 <code>/info bitos</code>
 <code>/history raykiee</code>
+<code>/bobadd vps1 http://1.2.3.4:40420</code>
     `.trim();
     bot.sendMessage(chatId, help, { parse_mode: 'HTML' });
   });
@@ -464,6 +490,73 @@ Bot otomatis alert kalau node kamu:
     }
   });
 
+  // /bobadd ALIAS URL - monitor a BOB JSON-RPC endpoint
+  bot.onText(/\/bobadd(?:@\w+)?\s+(\S+)\s+(\S+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const alias = match[1].trim();
+    const url = match[2].trim();
+
+    if (!/^https?:\/\//i.test(url)) {
+      return bot.sendMessage(chatId,
+        'URL harus diawali http:// atau https://\nContoh: <code>/bobadd vps1 http://1.2.3.4:40420</code>',
+        { parse_mode: 'HTML' }
+      );
+    }
+
+    const loadingMsg = await bot.sendMessage(chatId, 'Testing BOB RPC endpoint...');
+
+    try {
+      const live = await fetchBobTick(url);
+      const added = addBobNode(chatId, alias, url);
+      const statusLine = added ? 'BOB endpoint ditambahkan.' : 'BOB endpoint dengan alias itu sudah ada.';
+      await bot.editMessageText(
+        `<b>${escapeHtml(statusLine)}</b>\n` +
+        `|- Alias: <b>${escapeHtml(alias)}</b>\n` +
+        `|- Tick: <code>${formatNumber(live.tick)}</code>\n` +
+        `|- Latency: <b>${live.latencyMs} ms</b>\n` +
+        `\`- URL: <code>${escapeHtml(normalizeBobRpcUrl(url))}</code>`,
+        { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'HTML' }
+      );
+    } catch (err) {
+      await bot.editMessageText(
+        `Gagal test BOB RPC: ${escapeHtml(err.message)}\n\n` +
+        `Pastikan port 40420 bisa diakses dan endpoint <code>/qubic</code> aktif.`,
+        { chat_id: chatId, message_id: loadingMsg.message_id, parse_mode: 'HTML' }
+      );
+    }
+  });
+
+  // /bobcheck - show BOB endpoint monitor status
+  bot.onText(/\/bobcheck(?:@\w+)?(?:\s|$)/, async (msg) => {
+    const chatId = msg.chat.id;
+    const nodes = getBobNodesByChat(chatId);
+
+    if (nodes.length === 0) {
+      return bot.sendMessage(chatId,
+        'Belum ada BOB endpoint.\nGunakan <code>/bobadd alias http://ip:40420</code>.',
+        { parse_mode: 'HTML' }
+      );
+    }
+
+    for (const node of nodes) {
+      const status = getBobStatus(node.alias, node.url);
+      await bot.sendMessage(chatId, formatBobStatus(node.alias, node.url, status), { parse_mode: 'HTML' });
+    }
+  });
+
+  // /bobremove ALIAS
+  bot.onText(/\/bobremove(?:@\w+)?\s+(\S+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const alias = match[1].trim();
+    const removed = removeBobNode(chatId, alias);
+
+    if (removed) {
+      bot.sendMessage(chatId, `BOB endpoint <b>${escapeHtml(alias)}</b> dihapus.`, { parse_mode: 'HTML' });
+    } else {
+      bot.sendMessage(chatId, `BOB endpoint <b>${escapeHtml(alias)}</b> tidak ditemukan.`, { parse_mode: 'HTML' });
+    }
+  });
+
   // Handle commands without arguments
   bot.onText(/\/add(?:@\w+)?$/, (msg) => {
     bot.sendMessage(msg.chat.id,
@@ -489,6 +582,20 @@ Bot otomatis alert kalau node kamu:
   bot.onText(/\/history(?:@\w+)?$/, (msg) => {
     bot.sendMessage(msg.chat.id,
       '⚠️ Masukkan address atau alias:\n<code>/history address_or_alias</code>\n\nContoh:\n<code>/history raykiee</code>',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.onText(/\/bobadd(?:@\w+)?$/, (msg) => {
+    bot.sendMessage(msg.chat.id,
+      'Masukkan alias dan URL BOB RPC:\n<code>/bobadd vps1 http://1.2.3.4:40420</code>',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.onText(/\/bobremove(?:@\w+)?$/, (msg) => {
+    bot.sendMessage(msg.chat.id,
+      'Masukkan alias BOB endpoint:\n<code>/bobremove vps1</code>',
       { parse_mode: 'HTML' }
     );
   });

@@ -75,6 +75,7 @@ async function fetchQubicPrice() {
 }
 
 const QUBIC_RPC_URL = 'https://rpc.qubic.org/live/v1/balances';
+const QUBIC_STATUS_URL = process.env.QUBIC_STATUS_URL || 'https://rpc.qubic.org/v1/tick-info';
 
 async function fetchWalletBalance(address) {
   const url = `${QUBIC_RPC_URL}/${encodeURIComponent(address)}`;
@@ -95,4 +96,88 @@ async function fetchWalletBalance(address) {
   return data.balance || null;
 }
 
-module.exports = { fetchNode, fetchAllNodes, searchNode, fetchStats, fetchQubicPrice, fetchWalletBalance };
+async function fetchReferenceTick() {
+  const res = await fetch(QUBIC_STATUS_URL, {
+    headers: HEADERS,
+    signal: AbortSignal.timeout(Number(process.env.BOB_RPC_TIMEOUT_MS || 10000)),
+  });
+  if (!res.ok) throw new Error(`Reference tick API error: ${res.status} ${res.statusText}`);
+  const data = await res.json();
+  const tick = parseTickValue(data?.tickInfo?.tick ?? data?.tick ?? data?.currentTick);
+  if (tick == null) throw new Error('Reference tick API did not return a tick');
+  return tick;
+}
+
+async function fetchBobTick(url) {
+  const endpoint = normalizeBobRpcUrl(url);
+  const startedAt = Date.now();
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'content-type': 'application/json',
+      'user-agent': 'QubicMonitorBot/1.0',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'qubic_getTickNumber',
+      params: [],
+      id: 1,
+    }),
+    signal: AbortSignal.timeout(Number(process.env.BOB_RPC_TIMEOUT_MS || 10000)),
+  });
+
+  const latencyMs = Date.now() - startedAt;
+  if (!res.ok) throw new Error(`BOB RPC error: ${res.status} ${res.statusText}`);
+
+  const data = await res.json();
+  if (data.error) {
+    const message = data.error.message || JSON.stringify(data.error);
+    throw new Error(`BOB RPC returned error: ${message}`);
+  }
+
+  const tick = parseTickValue(
+    data.result?.tick ??
+    data.result?.tickNumber ??
+    data.result?.number ??
+    data.result
+  );
+  if (tick == null) throw new Error('BOB RPC did not return a tick number');
+
+  return { tick, latencyMs, endpoint };
+}
+
+function normalizeBobRpcUrl(url) {
+  const clean = String(url || '').trim().replace(/\/+$/, '');
+  if (!clean) throw new Error('BOB RPC URL is empty');
+  if (clean.endsWith('/qubic')) return clean;
+  return `${clean}/qubic`;
+}
+
+function parseTickValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^0x[0-9a-f]+$/i.test(trimmed)) return Number.parseInt(trimmed, 16);
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === 'object') {
+    return parseTickValue(value.tick ?? value.tickNumber ?? value.number);
+  }
+  return null;
+}
+
+module.exports = {
+  fetchNode,
+  fetchAllNodes,
+  searchNode,
+  fetchStats,
+  fetchQubicPrice,
+  fetchWalletBalance,
+  fetchReferenceTick,
+  fetchBobTick,
+  normalizeBobRpcUrl,
+};

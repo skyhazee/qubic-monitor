@@ -1,66 +1,222 @@
-# 🛡️ Qubic Node Monitor Bot
+# Qubic Monitor Bot
 
-Telegram bot untuk memantau node Qubic Guardian. Tambahkan node, cek status live, lihat skor dan estimasi reward.
+Telegram bot untuk monitor Qubic Guardian node, wallet, dan BOB node di beberapa VPS.
 
-## Setup
+Fitur BOB monitor:
 
-1. **Clone & install**
-   ```bash
-   npm install
-   ```
+- cek tick terbaru dari BOB JSON-RPC
+- hitung `tick/sec`
+- bandingkan lag dengan reference tick publik
+- alert ketika BOB RPC offline, stuck, behind, slow, dan recovered
+- bisa monitor 2 VPS atau lebih lewat command Telegram
 
-2. **Buat file `.env`**
-   ```bash
-   cp .env.example .env
-   ```
-   Isi `TELEGRAM_BOT_TOKEN` dengan token dari [@BotFather](https://t.me/BotFather)
+## BOB Endpoint Yang Dipakai
 
-3. **Jalankan bot**
-   ```bash
-   npm start
-   ```
-   Atau dengan auto-reload:
-   ```bash
-   npm run dev
-   ```
+BOB expose JSON-RPC di:
 
-## Commands
+```text
+http://YOUR_VPS_IP:40420/qubic
+```
+
+Method yang dipakai monitor:
+
+```json
+{"jsonrpc":"2.0","method":"qubic_getTickNumber","params":[],"id":1}
+```
+
+Kalau kamu input base URL seperti `http://YOUR_VPS_IP:40420`, bot otomatis menambahkan `/qubic`.
+
+## Local Setup
+
+```bash
+npm install
+cp .env.example .env
+nano .env
+npm start
+```
+
+Isi `.env`:
+
+```env
+TELEGRAM_BOT_TOKEN=token_dari_botfather
+
+BOB_CHECK_INTERVAL_MS=10000
+BOB_RPC_TIMEOUT_MS=10000
+BOB_OFFLINE_AFTER_ERRORS=3
+BOB_STUCK_AFTER_MS=120000
+BOB_LAG_THRESHOLD_TICKS=100
+BOB_SLOW_TPS_THRESHOLD=0.05
+QUBIC_STATUS_URL=https://rpc.qubic.org/v1/tick-info
+```
+
+## Telegram Commands
+
+Guardian node:
 
 | Command | Deskripsi |
-|---------|-----------|
+| --- | --- |
 | `/start` | Welcome message |
-| `/add <address atau alias>` | Tambah node ke watchlist |
-| `/check` | Lihat semua node terdaftar |
-| `/info <address atau alias>` | Info node tanpa menambahkan |
+| `/add <address atau alias>` | Tambah Guardian node ke watchlist |
+| `/check` | Lihat semua Guardian node |
+| `/info <address atau alias>` | Info Guardian node tanpa menambahkan |
 | `/history <address atau alias>` | Lihat epoch history |
-| `/wallet` | Lihat saldo wallet (auto-detect dari node) |
-| `/remove <address atau alias>` | Hapus node dari watchlist |
+| `/wallet` | Lihat saldo wallet dari operator address |
+| `/remove <address atau alias>` | Hapus Guardian node |
 | `/help` | Bantuan |
 
-## Contoh
+BOB VPS:
 
+| Command | Deskripsi |
+| --- | --- |
+| `/bobadd <alias> <url>` | Tambah BOB RPC endpoint |
+| `/bobcheck` | Lihat status BOB tick, tick/sec, lag, latency |
+| `/bobremove <alias>` | Hapus BOB RPC endpoint |
+
+Contoh untuk 2 VPS:
+
+```text
+/bobadd bob-vps-1 http://1.2.3.4:40420
+/bobadd bob-vps-2 http://5.6.7.8:40420
+/bobcheck
 ```
-/add 0x
-/add SFR...
-/info bitos
-/wallet
-/history 0x
-/remove 0x
+
+## Alert Rules
+
+Default rule:
+
+- `OFFLINE`: BOB RPC gagal 3x berturut-turut
+- `STUCK`: tick tidak maju selama 120 detik
+- `BEHIND`: lag lebih dari 100 tick dari reference
+- `SLOW`: tick/sec di bawah `0.05` ketika node juga behind
+- `RECOVERED`: node balik ke status OK
+
+Threshold bisa diubah lewat `.env`.
+
+## Deploy Di VPS
+
+Contoh ini untuk Ubuntu 22.04/24.04.
+
+### 1. Install dependency
+
+```bash
+sudo apt update
+sudo apt install -y git curl ca-certificates
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
 ```
 
-Bot akan menampilkan:
-- Status aktif (🟢/🔴) dan tipe (BOB/LITE)
-- Eligible/ineligible status + alasan
-- Sync status (last tick vs reference tick)
-- Live scores (uptime, sync, final) dengan progress bar
-- Reward points + estimasi dalam USD
-- Epoch history
-- **Wallet balance** (auto-detect dari Operator address)
-- **Auto alert** saat saldo wallet berubah
+Cek:
 
-## Tech Stack
-- Node.js
-- node-telegram-bot-api
-- CoinGecko API (harga QUBIC)
-- Qubic Guardians API
-- Qubic RPC API (wallet balance)
+```bash
+node -v
+npm -v
+pm2 -v
+```
+
+### 2. Clone repo
+
+Pakai HTTPS:
+
+```bash
+git clone https://github.com/skyhazee/qubic-monitor.git
+cd qubic-monitor
+```
+
+Atau SSH:
+
+```bash
+git clone git@github.com:skyhazee/qubic-monitor.git
+cd qubic-monitor
+```
+
+### 3. Install package dan konfigurasi
+
+```bash
+npm install
+cp .env.example .env
+nano .env
+```
+
+Minimal isi:
+
+```env
+TELEGRAM_BOT_TOKEN=ISI_TOKEN_BOT_TELEGRAM
+```
+
+### 4. Jalankan dengan PM2
+
+```bash
+pm2 start src/index.js --name qubic-monitor
+pm2 save
+pm2 startup
+```
+
+Command `pm2 startup` akan menampilkan satu command `sudo env ...`. Copy dan jalankan command itu supaya bot auto-start setelah reboot.
+
+Cek log:
+
+```bash
+pm2 logs qubic-monitor
+```
+
+Restart setelah update `.env`:
+
+```bash
+pm2 restart qubic-monitor
+```
+
+### 5. Daftarkan BOB node dari Telegram
+
+Buka chat bot Telegram, lalu kirim:
+
+```text
+/bobadd bob-vps-1 http://IP_VPS_BOB_1:40420
+/bobadd bob-vps-2 http://IP_VPS_BOB_2:40420
+/bobcheck
+```
+
+Bot akan test endpoint dulu sebelum menyimpan.
+
+## Firewall BOB VPS
+
+Kalau monitor bot berjalan di VPS terpisah dari BOB node, pastikan port API BOB bisa diakses dari VPS monitor.
+
+Di VPS BOB:
+
+```bash
+sudo ufw allow from IP_VPS_MONITOR to any port 40420 proto tcp
+sudo ufw status
+```
+
+Hindari membuka `40420` ke seluruh internet kalau tidak perlu. Lebih aman whitelist IP VPS monitor.
+
+Tes dari VPS monitor:
+
+```bash
+curl -X POST http://IP_VPS_BOB:40420/qubic \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"qubic_getTickNumber","params":[],"id":1}'
+```
+
+Response sukses harus berisi field `result` dengan tick number.
+
+## Update Bot Di VPS
+
+```bash
+cd qubic-monitor
+git pull
+npm install
+pm2 restart qubic-monitor
+pm2 logs qubic-monitor
+```
+
+## Data
+
+Bot menyimpan watchlist dan status terakhir di:
+
+```text
+data.json
+```
+
+Backup file ini kalau pindah VPS.
