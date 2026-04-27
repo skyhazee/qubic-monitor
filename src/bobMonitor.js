@@ -7,6 +7,8 @@ const OFFLINE_AFTER_ERRORS = Number(process.env.BOB_OFFLINE_AFTER_ERRORS || 3);
 const STUCK_AFTER_MS = Number(process.env.BOB_STUCK_AFTER_MS || 120000);
 const LAG_THRESHOLD_TICKS = Number(process.env.BOB_LAG_THRESHOLD_TICKS || 100);
 const SLOW_TPS_THRESHOLD = Number(process.env.BOB_SLOW_TPS_THRESHOLD || 0.05);
+const REFERENCE_LOG_INTERVAL_MS = Number(process.env.REFERENCE_TICK_LOG_INTERVAL_MS || 300000);
+let lastReferenceTickErrorLogAt = 0;
 
 function startBobMonitor(bot) {
   console.log(`BOB monitor started (checking every ${Math.round(CHECK_INTERVAL_MS / 1000)}s)`);
@@ -26,11 +28,14 @@ async function runBobChecks(bot) {
 
   const uniqueNodes = collectUniqueBobNodes(bobNodes);
   let referenceTick = null;
+  let referenceSource = null;
 
   try {
-    referenceTick = await fetchReferenceTick();
+    const reference = await fetchReferenceTick();
+    referenceTick = reference.tick;
+    referenceSource = reference.source;
   } catch (err) {
-    console.error('BOB monitor: failed to fetch reference tick:', err.message);
+    logReferenceTickError(err);
   }
 
   const outcomes = [];
@@ -53,7 +58,7 @@ async function runBobChecks(bot) {
       await handleBobError(bot, outcome);
       continue;
     }
-    await handleBobSuccess(bot, outcome, effectiveReferenceTick, referenceTick != null);
+    await handleBobSuccess(bot, outcome, effectiveReferenceTick, referenceTick != null, referenceSource);
   }
 }
 
@@ -79,7 +84,7 @@ async function handleBobError(bot, outcome) {
   }
 }
 
-async function handleBobSuccess(bot, outcome, referenceTick, hasExternalReference) {
+async function handleBobSuccess(bot, outcome, referenceTick, hasExternalReference, referenceSource) {
   const { node, prev, tick, latencyMs, endpoint } = outcome;
   const now = Date.now();
   const prevTick = prev?.tick;
@@ -107,6 +112,7 @@ async function handleBobSuccess(bot, outcome, referenceTick, hasExternalReferenc
     tickPerSecond,
     lag,
     referenceTick,
+    referenceSource,
     hasExternalReference,
     latencyMs,
     endpoint,
@@ -127,6 +133,17 @@ async function handleBobSuccess(bot, outcome, referenceTick, hasExternalReferenc
   }
 
   await sendBobAlert(bot, node, status, buildBobDetail(nextStatus));
+}
+
+function logReferenceTickError(err) {
+  const now = Date.now();
+  if (now - lastReferenceTickErrorLogAt < REFERENCE_LOG_INTERVAL_MS) return;
+
+  lastReferenceTickErrorLogAt = now;
+  console.error(
+    'BOB monitor: failed to fetch external reference tick; using local max fallback:',
+    err.message
+  );
 }
 
 function collectUniqueBobNodes(bobNodes) {

@@ -46,7 +46,9 @@ BOB_OFFLINE_AFTER_ERRORS=3
 BOB_STUCK_AFTER_MS=120000
 BOB_LAG_THRESHOLD_TICKS=100
 BOB_SLOW_TPS_THRESHOLD=0.05
-QUBIC_STATUS_URL=https://rpc.qubic.org/v1/tick-info
+REFERENCE_TICK_TIMEOUT_MS=5000
+REFERENCE_TICK_LOG_INTERVAL_MS=300000
+REFERENCE_TICK_URLS=https://rpc.qubic.org/v1/tick-info,https://rpc.qubic.org/live/v1/tick-info,https://guardians.qubic.org/api/v1/stats
 ```
 
 ## Telegram Commands
@@ -91,6 +93,13 @@ Default rule:
 - `RECOVERED`: node balik ke status OK
 
 Threshold bisa diubah lewat `.env`.
+
+Jika log berisi `failed to fetch external reference tick`, bot tetap jalan dan memakai tick tertinggi dari BOB node terdaftar sebagai fallback. Untuk VPS yang koneksinya sering timeout ke `rpc.qubic.org`, naikkan timeout atau pakai endpoint reference lain:
+
+```env
+REFERENCE_TICK_TIMEOUT_MS=15000
+REFERENCE_TICK_URLS=https://guardians.qubic.org/api/v1/stats,https://rpc.qubic.org/v1/tick-info
+```
 
 ## Deploy Di VPS
 

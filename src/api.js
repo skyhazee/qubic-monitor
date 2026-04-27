@@ -75,7 +75,11 @@ async function fetchQubicPrice() {
 }
 
 const QUBIC_RPC_URL = 'https://rpc.qubic.org/live/v1/balances';
-const QUBIC_STATUS_URL = process.env.QUBIC_STATUS_URL || 'https://rpc.qubic.org/v1/tick-info';
+const DEFAULT_REFERENCE_TICK_URLS = [
+  'https://rpc.qubic.org/v1/tick-info',
+  'https://rpc.qubic.org/live/v1/tick-info',
+  `${BASE_URL}/stats`,
+];
 
 async function fetchWalletBalance(address) {
   const url = `${QUBIC_RPC_URL}/${encodeURIComponent(address)}`;
@@ -97,15 +101,29 @@ async function fetchWalletBalance(address) {
 }
 
 async function fetchReferenceTick() {
-  const res = await fetch(QUBIC_STATUS_URL, {
-    headers: HEADERS,
-    signal: AbortSignal.timeout(Number(process.env.BOB_RPC_TIMEOUT_MS || 10000)),
-  });
-  if (!res.ok) throw new Error(`Reference tick API error: ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  const tick = parseTickValue(data?.tickInfo?.tick ?? data?.tick ?? data?.currentTick);
-  if (tick == null) throw new Error('Reference tick API did not return a tick');
-  return tick;
+  const urls = getReferenceTickUrls();
+  const timeoutMs = Number(process.env.REFERENCE_TICK_TIMEOUT_MS || 5000);
+  const errors = [];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+      const data = await res.json();
+      const tick = parseReferenceTick(data);
+      if (tick == null) throw new Error('tick not found in response');
+
+      return { tick, source: url };
+    } catch (err) {
+      errors.push(`${url}: ${err.message}`);
+    }
+  }
+
+  throw new Error(errors.join(' | '));
 }
 
 async function fetchBobTick(url) {
@@ -168,6 +186,27 @@ function parseTickValue(value) {
     return parseTickValue(value.tick ?? value.tickNumber ?? value.number);
   }
   return null;
+}
+
+function getReferenceTickUrls() {
+  const configured = process.env.REFERENCE_TICK_URLS || process.env.QUBIC_STATUS_URL;
+  const urls = configured
+    ? configured.split(',').map(url => url.trim()).filter(Boolean)
+    : DEFAULT_REFERENCE_TICK_URLS;
+  return [...new Set(urls)];
+}
+
+function parseReferenceTick(data) {
+  return parseTickValue(
+    data?.tickInfo?.tick ??
+    data?.reference?.tick ??
+    data?.reference?.lastTick ??
+    data?.reference?.currentTick ??
+    data?.lastReferenceTick ??
+    data?.currentTick ??
+    data?.tick ??
+    data?.lastTick
+  );
 }
 
 module.exports = {
