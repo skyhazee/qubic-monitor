@@ -282,8 +282,11 @@ do_monitor() {
     ensure_log
 
     local prev_tick=0
+    local prev_net_tick=0
     local prev_time=0
     local speed=0
+    local net_speed=""
+    local catchup_speed=""
 
     trap 'echo ""; echo "Monitor stopped."; exit 0' INT
 
@@ -302,6 +305,20 @@ do_monitor() {
             if [ "$time_diff" -gt 0 ] && [ "$tick_diff" -ge 0 ]; then
                 speed=$(awk "BEGIN {printf \"%.2f\", $tick_diff / $time_diff}")
             fi
+        fi
+
+        net_speed=""
+        catchup_speed=""
+        if [ -n "$net_tick" ] && [ "$prev_net_tick" -gt 0 ] && [ "$prev_time" -gt 0 ]; then
+            local net_diff=$(( net_tick - prev_net_tick ))
+            local net_time_diff=$(( now - prev_time ))
+            if [ "$net_time_diff" -gt 0 ] && [ "$net_diff" -ge 0 ]; then
+                net_speed=$(awk "BEGIN {printf \"%.2f\", $net_diff / $net_time_diff}")
+            fi
+        fi
+
+        if [ -n "$net_speed" ] && [ -n "$speed" ]; then
+            catchup_speed=$(awk "BEGIN {printf \"%.2f\", $speed - $net_speed}")
         fi
 
         echo -e "${BOLD}==============================================${NC}"
@@ -347,6 +364,31 @@ do_monitor() {
             echo -e "  Speed      : ${YELLOW}calculating...${NC}"
         fi
 
+        if [ -n "${behind:-}" ] && [ "$behind" -gt 0 ] && [ -n "$net_speed" ] && [ -n "$catchup_speed" ]; then
+            echo -e "  Net Speed  : ${CYAN}${net_speed} tick/s${NC}"
+
+            if awk "BEGIN {exit !($catchup_speed > 0)}"; then
+                local eta_full eta_band remaining_to_band
+                eta_full=$(awk "BEGIN {printf \"%d\", $behind / $catchup_speed}")
+                remaining_to_band=$(( behind - SYNC_OK_BEHIND ))
+                [ "$remaining_to_band" -lt 0 ] && remaining_to_band=0
+                eta_band=$(awk "BEGIN {printf \"%d\", $remaining_to_band / $catchup_speed}")
+
+                echo -e "  Catch-up   : ${GREEN}+${catchup_speed} tick/s${NC}"
+                if [ "$behind" -gt "$SYNC_OK_BEHIND" ]; then
+                    echo -e "  ETA Band   : ${CYAN}$(format_time "$eta_band")${NC} (behind <= ${SYNC_OK_BEHIND})"
+                else
+                    echo -e "  ETA Band   : ${GREEN}already inside sync band${NC}"
+                fi
+                echo -e "  ETA Full   : ${CYAN}$(format_time "$eta_full")${NC} (behind 0)"
+            else
+                echo -e "  Catch-up   : ${RED}${catchup_speed} tick/s${NC}"
+                echo -e "  ETA Sync   : ${YELLOW}not catching up yet${NC}"
+            fi
+        elif [ -n "${behind:-}" ] && [ "$behind" -gt 0 ]; then
+            echo -e "  ETA Sync   : ${YELLOW}calculating net speed...${NC}"
+        fi
+
         echo ""
         echo -e "  ${BOLD}--- Auto-Restart Config -------------------${NC}"
         echo "  Sync band       : no speed restart when behind <= ${SYNC_OK_BEHIND}"
@@ -367,6 +409,7 @@ do_monitor() {
         docker logs --tail 5 "$CONTAINER_NAME" 2>/dev/null | sed 's/^/  /' || echo "  (no log)"
 
         prev_tick=${local_tick:-$prev_tick}
+        prev_net_tick=${net_tick:-$prev_net_tick}
         prev_time=$now
 
         check_and_maybe_restart

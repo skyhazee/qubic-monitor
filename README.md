@@ -226,6 +226,14 @@ Monitor interaktif:
 sudo ./scripts/bob-monitor.sh
 ```
 
+Tampilan monitor menghitung:
+
+- `Speed`: speed tick lokal BOB
+- `Net Speed`: speed tick network
+- `Catch-up`: `Speed - Net Speed`
+- `ETA Band`: estimasi sampai masuk sync band, default `behind <= 1000`
+- `ETA Full`: estimasi sampai behind `0`
+
 Cek status dan log:
 
 ```bash
