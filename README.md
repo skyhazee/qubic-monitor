@@ -201,6 +201,45 @@ curl -X POST http://IP_VPS_BOB:40420/qubic \
 
 Response sukses harus berisi field `result` dengan tick number.
 
+## Auto-Restart Di VPS BOB
+
+Kalau BOB node lama-lama catch-up speed turun drastis setelah jalan lama, pasang script ini langsung di masing-masing VPS BOB:
+
+```bash
+cd qubic-monitor
+chmod +x scripts/bob-monitor.sh
+sudo ./scripts/bob-monitor.sh install
+```
+
+Monitor interaktif:
+
+```bash
+sudo ./scripts/bob-monitor.sh
+```
+
+Cek status dan log:
+
+```bash
+sudo ./scripts/bob-monitor.sh status
+sudo ./scripts/bob-monitor.sh logs
+```
+
+Default logic script:
+
+- kalau container mati, restart dengan cooldown
+- kalau API port `40420` gagal beberapa kali, restart dengan cooldown
+- kalau `behind <= 1000`, node dianggap sudah sync/dekat sync dan tick/sec rendah tidak memicu restart
+- kalau `behind > 1000` dan speed catch-up `< 2.0 tick/s` selama `180s`, restart
+- setelah restart, cooldown `900s` supaya tidak restart loop
+
+Config bisa diubah via environment saat install/jalan:
+
+```bash
+sudo SYNC_OK_BEHIND=1000 MIN_CATCHUP_SPEED=2.0 SLOW_WINDOW=180 ./scripts/bob-monitor.sh install
+```
+
+Untuk BOB yang sudah full sync, jangan pakai threshold speed mentah seperti `MIN_SPEED=2.0` tanpa melihat `behind`, karena tick network normal bisa lebih rendah dari itu.
+
 ## Update Bot Di VPS
 
 ```bash
