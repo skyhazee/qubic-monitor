@@ -45,7 +45,11 @@ BOB_RPC_TIMEOUT_MS=10000
 BOB_OFFLINE_AFTER_ERRORS=3
 BOB_STUCK_AFTER_MS=120000
 BOB_LAG_THRESHOLD_TICKS=100
-BOB_SLOW_TPS_THRESHOLD=0.05
+BOB_SLOW_TPS_THRESHOLD=1.0
+BOB_SPEED_WINDOW_MS=60000
+BOB_SLOW_ALERT_AFTER_MS=120000
+BOB_ALERT_REPEAT_INTERVAL_MS=1800000
+BOB_ALERT_BEHIND=false
 REFERENCE_TICK_TIMEOUT_MS=5000
 REFERENCE_TICK_LOG_INTERVAL_MS=300000
 REFERENCE_TICK_URLS=https://rpc.qubic.org/v1/tick-info,https://rpc.qubic.org/live/v1/tick-info,https://guardians.qubic.org/api/v1/stats
@@ -88,11 +92,17 @@ Default rule:
 
 - `OFFLINE`: BOB RPC gagal 3x berturut-turut
 - `STUCK`: tick tidak maju selama 120 detik
-- `BEHIND`: lag lebih dari 100 tick dari reference
-- `SLOW`: tick/sec di bawah `0.05` ketika node juga behind
+- `BEHIND`: lag lebih dari 100 tick dari reference, ditampilkan di `/bobcheck` tapi tidak dikirim sebagai alert default
+- `SLOW`: rolling average tick/sec 60 detik di bawah `1.0` selama 120 detik ketika node juga behind
 - `RECOVERED`: node balik ke status OK
 
 Threshold bisa diubah lewat `.env`.
+
+Untuk menghindari spam Telegram, alert `BEHIND` default-nya mati. Aktifkan hanya kalau memang mau notifikasi setiap node masuk status behind:
+
+```env
+BOB_ALERT_BEHIND=true
+```
 
 Jika log berisi `failed to fetch external reference tick`, bot tetap jalan dan memakai tick tertinggi dari BOB node terdaftar sebagai fallback. Untuk VPS yang koneksinya sering timeout ke `rpc.qubic.org`, naikkan timeout atau pakai endpoint reference lain:
 
