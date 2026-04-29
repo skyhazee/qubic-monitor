@@ -236,6 +236,14 @@ Monitor interaktif:
 sudo ./scripts/bob-monitor.sh
 ```
 
+Saat mode interaktif dibuka, script akan bertanya:
+
+```text
+Nyalakan auto restart? y/N
+```
+
+Jawab `y` kalau monitor interaktif boleh restart BOB. Tekan Enter atau jawab `n` kalau hanya ingin memantau. Mode daemon/cron dari `install` tetap auto-restart aktif.
+
 Tampilan monitor menghitung:
 
 - `Speed`: speed tick lokal BOB

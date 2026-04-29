@@ -30,6 +30,7 @@ MIN_CATCHUP_SPEED=${MIN_CATCHUP_SPEED:-2.0}
 SLOW_WINDOW=${SLOW_WINDOW:-180}
 RESTART_COOLDOWN=${RESTART_COOLDOWN:-900}
 API_FAIL_RESTART_AFTER=${API_FAIL_RESTART_AFTER:-3}
+AUTO_RESTART_ENABLED=${AUTO_RESTART_ENABLED:-1}
 
 MONITOR_INTERVAL=${MONITOR_INTERVAL:-5}
 DAEMON_INTERVAL=${DAEMON_INTERVAL:-30}
@@ -167,6 +168,12 @@ do_node_restart() {
 
 try_restart() {
     local reason="$1"
+
+    if [ "${AUTO_RESTART_ENABLED:-1}" != "1" ]; then
+        log_to_file "Auto-restart disabled; would restart. Reason: $reason"
+        return 0
+    fi
+
     local left
     left=$(cooldown_left)
     if [ "$left" -le 0 ]; then
@@ -281,6 +288,22 @@ do_daemon() {
 do_monitor() {
     ensure_log
 
+    local answer
+    if [ -t 0 ]; then
+        read -r -p "Nyalakan auto restart? y/N " answer
+    else
+        answer="${AUTO_RESTART_MONITOR_DEFAULT:-n}"
+    fi
+
+    case "$answer" in
+        y|Y|yes|YES)
+            AUTO_RESTART_ENABLED=1
+            ;;
+        *)
+            AUTO_RESTART_ENABLED=0
+            ;;
+    esac
+
     local prev_tick=0
     local prev_net_tick=0
     local prev_time=0
@@ -391,6 +414,11 @@ do_monitor() {
 
         echo ""
         echo -e "  ${BOLD}--- Auto-Restart Config -------------------${NC}"
+        if [ "${AUTO_RESTART_ENABLED:-1}" = "1" ]; then
+            echo -e "  Auto Restart   : ${GREEN}ON${NC}"
+        else
+            echo -e "  Auto Restart   : ${YELLOW}OFF${NC} (monitor only)"
+        fi
         echo "  Sync band       : no speed restart when behind <= ${SYNC_OK_BEHIND}"
         echo "  Min catch-up    : ${MIN_CATCHUP_SPEED} tick/s"
         echo "  Slow window     : ${SLOW_WINDOW}s"
